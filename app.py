@@ -1,9 +1,12 @@
-
 import streamlit as st
 import pandas as pd
+from pathlib import Path
 from textwrap import dedent
+import re
 
 from dashboard.agent_bridge import run_customer_workflow
+from rag.rag_pipeline import RAGPipeline
+from rag.retriever import CustomerChurnEvidenceRetriever
 from utils.integration_errors import IntegrationError
 
 
@@ -15,8 +18,112 @@ st.set_page_config(
     page_title="Customer Intelligence Platform",
     page_icon="🧠",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
+
+
+PROJECT_DIR = Path(__file__).resolve().parent
+
+
+@st.cache_resource
+def get_rag_retriever():
+    """Load the demo retention guide and create a reusable RAG retriever."""
+    policy_file = PROJECT_DIR / "data" / "retention_guidelines.txt"
+
+    if not policy_file.exists():
+        raise FileNotFoundError(
+            f"Policy file not found: {policy_file}"
+        )
+
+    pipeline = RAGPipeline(
+        persist_directory=str(PROJECT_DIR / "data" / "chroma")
+    )
+    pipeline.ingest_files([policy_file])
+
+    return CustomerChurnEvidenceRetriever(pipeline=pipeline)
+
+
+def demo_strategy_generator(retention_context):
+    """
+    Create one demo suggestion only when retrieved evidence supports it.
+
+    The numeric thresholds below are illustrative choices for the demo,
+    not real company policy.
+    """
+    customer = (
+        retention_context
+        .get("customer_context", {})
+        .get("customer_data", {})
+    )
+    evidence = retention_context.get("evidence", [])
+
+    support_calls = pd.to_numeric(
+        customer.get("support_calls"),
+        errors="coerce",
+    )
+    tenure = pd.to_numeric(
+        customer.get("tenure"),
+        errors="coerce",
+    )
+    contract = str(customer.get("contract", "")).lower()
+
+    # Select a rule based on available customer details.
+    if pd.notna(support_calls) and support_calls >= 2:
+        keyword = "support follow-up"
+        recommendation = (
+            "Arrange a support follow-up to check whether the customer's "
+            "issue was resolved."
+        )
+    elif "month-to-month" in contract:
+        keyword = "contract and plan options"
+        recommendation = (
+            "Explain the available contract and plan options neutrally."
+        )
+    elif pd.notna(tenure) and tenure <= 6:
+        keyword = "onboarding check-in"
+        recommendation = (
+            "Offer an onboarding check-in and ask whether the customer "
+            "needs help with the service."
+        )
+    else:
+        keyword = "asking for feedback"
+        recommendation = (
+            "Ask the customer for feedback before suggesting a targeted action."
+        )
+
+    # Attach an exact sentence from the retrieved evidence as support.
+    for item in evidence:
+        source_id = item.get("source_id")
+        text = item.get("text", "")
+
+        if not source_id or not text:
+            continue
+
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            if keyword in sentence.lower():
+                quote = sentence.strip()
+
+                return [{
+                    "recommendation": recommendation,
+                    "source_ids": [source_id],
+                    "evidence_quotes": [{
+                        "source_id": source_id,
+                        "quote": quote,
+                    }],
+                }]
+
+    # If retrieval did not find supporting text, do not invent a suggestion.
+    return []
+
+
+# Initialize navigation before creating the radio widget.
+if "navigation_page" not in st.session_state:
+    st.session_state["navigation_page"] = "Executive Dashboard"
+
+
+def open_customer_analytics():
+    """Select Customer Analytics from the dashboard button."""
+    st.session_state["navigation_page"] = "Customer Analytics"
 
 
 # =====================================================
@@ -26,7 +133,7 @@ st.set_page_config(
 def render_html(content):
     st.markdown(
         dedent(content).strip(),
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
@@ -36,7 +143,6 @@ def render_html(content):
 
 render_html("""
 <style>
-
 .stApp {
     background:
         radial-gradient(circle at 10% 10%, rgba(99,102,241,.18), transparent 30%),
@@ -173,7 +279,7 @@ render_html("""
 .stButton button,
 .stDownloadButton button {
     border-radius: 12px;
-    background: linear-gradient(110deg,#4338ca,#7c3aed);
+    background: linear-gradient(110deg, #4338ca, #7c3aed);
     border: 1px solid #8b5cf6;
     color: white;
     font-weight: 700;
@@ -187,7 +293,6 @@ render_html("""
         transition: none !important;
     }
 }
-
 </style>
 """)
 
@@ -197,12 +302,11 @@ render_html("""
 # =====================================================
 
 def create_demo_data():
-
     return pd.DataFrame({
         "customer_id": [
             "C001", "C002", "C003", "C004",
             "C005", "C006", "C007", "C008",
-            "C009", "C010", "C011", "C012"
+            "C009", "C010", "C011", "C012",
         ],
         "tenure": [2, 12, 36, 5, 48, 8, 60, 18, 4, 30, 54, 10],
         "monthly_charges": [95, 75, 45, 100, 55, 88, 40, 72, 105, 60, 48, 92],
@@ -210,13 +314,13 @@ def create_demo_data():
             "Month-to-month", "One year", "Two year",
             "Month-to-month", "Two year", "Month-to-month",
             "Two year", "One year", "Month-to-month",
-            "One year", "Two year", "Month-to-month"
+            "One year", "Two year", "Month-to-month",
         ],
         "support_calls": [5, 2, 0, 6, 1, 4, 0, 2, 7, 1, 0, 5],
         "churn_probability": [
             .91, .48, .12, .87, .08, .73,
-            .05, .38, .95, .25, .09, .78
-        ]
+            .05, .38, .95, .25, .09, .78,
+        ],
     })
 
 
@@ -226,7 +330,6 @@ def mark_demo_dashboard_loaded():
 
 # =====================================================
 # SIDEBAR NAVIGATION
-# Keep the radio's selected page managed by its widget.
 # =====================================================
 
 st.sidebar.markdown("# 🧠 Customer AI")
@@ -236,7 +339,7 @@ st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "NAVIGATION",
     ["Executive Dashboard", "Customer Analytics"],
-    index=0
+    key="navigation_page",
 )
 
 st.sidebar.markdown("---")
@@ -260,7 +363,6 @@ st.sidebar.caption("Customer Intelligence | Capstone Project")
 # =====================================================
 
 if page == "Executive Dashboard":
-
     render_html("""
     <div class="main-hero">
         <div class="hero-tag">✦ NEXT-GENERATION AI ANALYTICS</div>
@@ -273,7 +375,6 @@ if page == "Executive Dashboard":
     """)
 
     st.markdown("## ✨ Platform Intelligence")
-
     st.write(
         "An integrated customer intelligence platform "
         "combining machine learning, advanced retrieval "
@@ -327,7 +428,16 @@ if page == "Executive Dashboard":
     """)
 
     st.markdown("---")
-    st.info("Select **Customer Analytics** from the sidebar to explore the dashboard.")
+    st.info(
+        "Select **Customer Analytics** from the sidebar, "
+        "or use the button below."
+    )
+
+    st.button(
+        "🚀 Explore Customer Analytics",
+        use_container_width=True,
+        on_click=open_customer_analytics,
+    )
 
 
 # =====================================================
@@ -335,7 +445,6 @@ if page == "Executive Dashboard":
 # =====================================================
 
 elif page == "Customer Analytics":
-
     render_html("""
     <div class="main-hero">
         <div class="hero-tag">✦ CUSTOMER ANALYTICS WORKSPACE</div>
@@ -346,7 +455,7 @@ elif page == "Customer Analytics":
 
     uploaded_file = st.file_uploader(
         "Upload customer CSV",
-        type=["csv"]
+        type=["csv"],
     )
 
     if uploaded_file is not None:
@@ -357,14 +466,13 @@ elif page == "Customer Analytics":
         except Exception as error:
             st.error(f"CSV reading error: {error}")
             st.stop()
-
     else:
         if not st.session_state.get("demo_dashboard_loaded", False):
             st.info("Upload a CSV or load synthetic demo records.")
             st.button(
                 "Load Demo Dashboard",
-                width="stretch",
-                on_click=mark_demo_dashboard_loaded
+                use_container_width=True,
+                on_click=mark_demo_dashboard_loaded,
             )
             st.stop()
 
@@ -383,12 +491,12 @@ elif page == "Customer Analytics":
         "churn probability",
         "churn_score",
         "churn score",
-        "probability"
+        "probability",
     ]
 
     probability_column = next(
         (column for column in candidates if column in df.columns),
-        None
+        None,
     )
 
     df = df.copy()
@@ -396,11 +504,13 @@ elif page == "Customer Analytics":
     if probability_column is not None:
         df[probability_column] = pd.to_numeric(
             df[probability_column],
-            errors="coerce"
+            errors="coerce",
         )
         valid_probabilities = df[probability_column].dropna()
+
         if not valid_probabilities.empty and valid_probabilities.max() > 1:
             df[probability_column] = df[probability_column] / 100
+
         df[probability_column] = df[probability_column].clip(0, 1)
     else:
         st.warning(
@@ -442,13 +552,12 @@ elif page == "Customer Analytics":
     )
 
     c1, c2, c3, c4 = st.columns(4)
-
     c1.metric("Total Customers", total)
     c2.metric("High Risk", high)
     c3.metric("Medium Risk", medium)
     c4.metric(
         "Average Churn Score",
-        f"{average:.1f}%" if average is not None else "Unavailable"
+        f"{average:.1f}%" if average is not None else "Unavailable",
     )
 
     # FILTERS
@@ -457,14 +566,13 @@ elif page == "Customer Analytics":
     st.markdown("## 🔎 Customer Filters")
 
     f1, f2 = st.columns(2)
-
     risk_options = ["High", "Medium", "Low", "Unknown"]
 
     with f1:
         selected_risks = st.multiselect(
             "Risk category",
             risk_options,
-            default=risk_options
+            default=risk_options,
         )
 
     with f2:
@@ -473,11 +581,11 @@ elif page == "Customer Analytics":
     customer_column = next(
         (
             column for column in [
-                "customer_id", "customerid", "customer id", "id"
+                "customer_id", "customerid", "customer id", "id",
             ]
             if column in df.columns
         ),
-        None
+        None,
     )
 
     if customer_column is None:
@@ -486,15 +594,12 @@ elif page == "Customer Analytics":
         ]
         customer_column = "customer_id"
 
-    filtered = df[
-        df["Risk Level"].isin(selected_risks)
-    ].copy()
-
+    filtered = df[df["Risk Level"].isin(selected_risks)].copy()
     filtered = filtered[
         filtered[customer_column].astype(str).str.contains(
             search,
             case=False,
-            na=False
+            na=False,
         )
     ]
 
@@ -525,13 +630,12 @@ elif page == "Customer Analytics":
 
     st.markdown("---")
     st.markdown("## 👥 Customer Explorer")
-
     st.caption(f"Showing {len(filtered)} of {total} customers.")
 
     st.dataframe(
         filtered,
         width="stretch",
-        hide_index=True
+        hide_index=True,
     )
 
     # CUSTOMER PROFILE
@@ -540,10 +644,9 @@ elif page == "Customer Analytics":
     st.markdown("## 🔍 Individual Customer Profile")
 
     if not filtered.empty:
-
         selected_customer = st.selectbox(
             "Select customer",
-            filtered[customer_column].astype(str).tolist()
+            filtered[customer_column].astype(str).tolist(),
         )
 
         profile = filtered[
@@ -558,7 +661,7 @@ elif page == "Customer Analytics":
             st.write(
                 profile.drop(
                     labels=["Risk Level", customer_column],
-                    errors="ignore"
+                    errors="ignore",
                 ).to_dict()
             )
 
@@ -573,11 +676,12 @@ elif page == "Customer Analytics":
                     f"{profile[probability_column] * 100:.1f}%"
                     if has_prediction
                     else "Unavailable"
-                )
+                ),
             )
             st.metric("Risk Category", profile["Risk Level"])
 
         st.markdown("### Evidence-grounded agent workflow")
+
         if is_demo_data and probability_column is not None:
             st.warning(
                 "Demo only: the displayed probability is synthetic. "
@@ -600,12 +704,13 @@ elif page == "Customer Analytics":
         if st.button(
             "Run customer workflow",
             key="run_customer_agent_workflow",
-            width="content"
+            use_container_width=True,
         ):
             customer_data = profile.drop(
                 labels=["Risk Level"],
-                errors="ignore"
+                errors="ignore",
             ).to_dict()
+
             prediction_result = (
                 {
                     "churn_probability": float(profile[probability_column]),
@@ -614,19 +719,25 @@ elif page == "Customer Analytics":
                 if has_prediction
                 else None
             )
+
             try:
+                retriever = get_rag_retriever()
+
                 workflow = run_customer_workflow(
                     customer_data,
-                    prediction_result
+                    prediction_result,
+                    retriever=retriever,
+                    strategy_generator=demo_strategy_generator,
                 )
-            except IntegrationError as error:
+            except (IntegrationError, FileNotFoundError, RuntimeError) as error:
                 st.error(
-                    "The customer workflow failed "
-                    f"({type(error).__name__}). No result is being shown."
+                    "The customer workflow could not run. "
+                    f"Details: {error}"
                 )
             else:
                 st.write(f"**Workflow status:** {workflow['workflow_status']}")
                 st.write(f"**Customer ID:** {selected_customer}")
+
                 if prediction_result is not None:
                     st.write(
                         "**Churn probability:** "
@@ -634,6 +745,7 @@ elif page == "Customer Analytics":
                     )
                 else:
                     st.write("**Churn probability:** unavailable")
+
                 st.write(f"**Risk category:** {profile['Risk Level']}")
 
                 if workflow["workflow_status"] in {
@@ -651,13 +763,16 @@ elif page == "Customer Analytics":
 
                     if workflow["retrieved_evidence"]:
                         st.markdown("#### Retrieved evidence")
+
                         for item in workflow["retrieved_evidence"]:
                             with st.container(border=True):
                                 st.write(f"**Source:** {item['source_id']}")
                                 st.write(item["text"])
+
                                 metadata = item.get("metadata")
                                 if metadata:
                                     st.json(metadata)
+
                     elif workflow["retrieval_status"] == "unavailable":
                         st.warning(
                             "No RAG retriever is integrated. "
@@ -671,12 +786,22 @@ elif page == "Customer Analytics":
 
                     if workflow["recommendations"]:
                         st.markdown("#### Recommendations")
+
                         for item in workflow["recommendations"]:
                             st.write(f"- {item['recommendation']}")
                             st.caption(
-                                "Sources: "
-                                + ", ".join(item["source_ids"])
+                                "Sources: " + ", ".join(item["source_ids"])
                             )
+
+                            for quote in item.get("evidence_quotes", []):
+                                st.caption(
+                                    f"Supporting quote: “{quote['quote']}”"
+                                )
+
+                        st.caption(
+                            "Demo-only, rule-based suggestions. Review them "
+                            "before treating them as real retention advice."
+                        )
                         st.info(
                             "Source IDs and exact evidence quotations were "
                             "validated. Semantic entailment is not configured; "
@@ -684,15 +809,16 @@ elif page == "Customer Analytics":
                         )
                     else:
                         st.info(
-                            "No recommendations were generated. A verified "
-                            "strategy generator and sufficient evidence are "
-                            "required."
+                            "No recommendation was generated because the "
+                            "retrieved evidence did not contain a matching "
+                            "supporting sentence."
                         )
 
                     st.write(
                         "**Verification status:** "
                         f"{workflow['verification']['verification_status']}"
                     )
+
                     if workflow["verification"]["rejected_recommendations"]:
                         st.warning("One or more recommendations were rejected.")
                         st.json(
@@ -714,7 +840,7 @@ elif page == "Customer Analytics":
         data=filtered.to_csv(index=False).encode("utf-8"),
         file_name="customer_intelligence_report.csv",
         mime="text/csv",
-        width="stretch"
+        use_container_width=True,
     )
 
     st.caption(

@@ -1,0 +1,32 @@
+DEMO RETENTION GUIDELINES
+Fictional educational content for the Agentic Churn Intelligence capstone.
+These guidelines are not from a real company and must not be presented as real company policy.
+
+PURPOSE
+Use these examples to demonstrate how retrieved evidence can support customer-specific retention suggestions. A churn probability may help prioritize a follow-up, but it does not explain why a customer may leave. Use customer details and retrieved evidence together.
+
+GUIDELINE 1 — REPEATED SUPPORT CONTACTS
+When a customer record shows repeated support calls, suggest a support follow-up to understand whether the customer's issue was resolved. The representative should review the customer's actual support history before proposing a solution. Do not promise compensation or claim that an issue exists unless the available record supports it.
+
+GUIDELINE 2 — MONTH-TO-MONTH CONTRACT
+When the record shows a month-to-month contract, suggest explaining the available contract and plan options in a neutral way. Do not pressure the customer to stay. Do not promise a lower price or a special offer unless an approved offer source confirms eligibility.
+
+GUIDELINE 3 — HIGH MONTHLY CHARGES
+When monthly charges appear high compared with the customer's needs or stated concern, suggest reviewing the bill and explaining currently available plans. The system must not infer that the customer is unhappy based on price alone. Do not promise a discount or change in price without an approved source.
+
+GUIDELINE 4 — SHORT TENURE
+For a customer with a short tenure, suggest an onboarding check-in. Ask whether the customer needs help understanding relevant service features. Do not claim that the customer has had a poor experience unless the record or retrieved evidence supports that statement.
+
+GUIDELINE 5 — NO CLEAR CUSTOMER ISSUE
+If the customer record does not show a specific service issue, billing concern, or support need, suggest asking for feedback before recommending a targeted action. Do not invent a reason for possible churn.
+
+RECOMMENDATION REQUIREMENTS
+1. Treat churn probability as a risk signal, not as proof of a customer's reason for leaving.
+2. Base each recommendation only on supplied customer details and retrieved evidence.
+3. For each recommendation, include the proposed action, the customer detail that makes it relevant, and the supporting source ID and exact quotation.
+4. Do not invent discounts, benefits, policy rules, customer complaints, or eligibility.
+5. If retrieved evidence is missing or does not support an action, do not generate a retention recommendation. Ask for human review instead.
+6. Present suggestions for a human representative to review; do not claim that an action was taken.
+
+DEMO DATA FIELD NOTES
+The sample dashboard CSV includes tenure, monthly_charges, contract, support_calls, and churn_probability. These fields can support simple demonstration scenarios. They do not establish customer sentiment, an actual complaint, offer eligibility, or a real company's policy.
