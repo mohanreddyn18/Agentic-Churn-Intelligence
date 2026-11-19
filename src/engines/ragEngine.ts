@@ -4,7 +4,7 @@ import type {
   RAGEvaluationReport,
   RAGSearchResult,
   RetrievedEvidenceChunk,
-} from '../src/types';
+} from '../types';
 
 export const INITIAL_KNOWLEDGE_BASE: KnowledgeDocument[] = [
   {
@@ -117,7 +117,6 @@ export const INITIAL_KNOWLEDGE_BASE: KnowledgeDocument[] = [
   },
 ];
 
-// Domain semantic concepts for dense vector projection (deterministic semantic embeddings)
 const SEMANTIC_CONCEPTS: Array<{ name: string; terms: string[] }> = [
   { name: 'contract_upgrade', terms: ['month', 'annual', 'year', 'contract', 'migration', 'commitment', 'term', 'renewal', 'lock'] },
   { name: 'support_recovery', terms: ['support', 'calls', 'tickets', 'sla', 'escalation', 'specialist', 'remediation', 'resolved', 'tier'] },
@@ -193,7 +192,6 @@ export class HybridRAGEngine {
   }
 
   private computeDenseVector(tokens: string[], vocabIndex: Map<string, number>): number[] {
-    // 1. Semantic concept embedding channels (12 dense concept dimensions, weighted strongly)
     const conceptVec = SEMANTIC_CONCEPTS.map((concept) => {
       let matches = 0;
       for (const tok of tokens) {
@@ -207,7 +205,6 @@ export class HybridRAGEngine {
       return Math.log1p(matches) * 2.2;
     });
 
-    // 2. Character trigram / lexical hashed semantic projection (32 dimensions)
     const hashDims = 32;
     const hashVec = Array(hashDims).fill(0);
     for (const tok of tokens) {
@@ -222,7 +219,6 @@ export class HybridRAGEngine {
       hashVec[bucket] += sign * idfWeight;
     }
 
-    // 3. Top vocabulary TF-IDF projection (capped to vocab size)
     const tf = new Map<string, number>();
     for (const tok of tokens) tf.set(tok, (tf.get(tok) || 0) + 1);
     const tfidfVec = Array(Math.min(80, vocabIndex.size)).fill(0);
@@ -270,7 +266,6 @@ export class HybridRAGEngine {
       });
     }
 
-    // Compute corpus document frequencies & Okapi BM25 IDF
     const N = Math.max(1, rawChunks.length);
     const df = new Map<string, number>();
     let totalLen = 0;
@@ -285,15 +280,12 @@ export class HybridRAGEngine {
 
     this.avgDocLen = totalLen / N;
     this.idf = new Map();
-    const sortedVocab = Array.from(df.entries())
+    this.vocab = Array.from(df.entries())
       .sort((a, b) => b[1] - a[1])
       .map(([tok]) => tok);
-    this.vocab = sortedVocab;
 
     for (const [tok, freq] of df.entries()) {
-      // Standard Okapi BM25 smoothed IDF
-      const val = Math.log(1 + (N - freq + 0.5) / (freq + 0.5));
-      this.idf.set(tok, val);
+      this.idf.set(tok, Math.log(1 + (N - freq + 0.5) / (freq + 0.5)));
     }
 
     const vocabIndex = new Map<string, number>();
@@ -316,11 +308,8 @@ export class HybridRAGEngine {
       updated_at: new Date().toISOString().slice(0, 10),
     };
     const existingIdx = this.documents.findIndex((d) => d.source_id === newDoc.source_id);
-    if (existingIdx >= 0) {
-      this.documents[existingIdx] = newDoc;
-    } else {
-      this.documents.push(newDoc);
-    }
+    if (existingIdx >= 0) this.documents[existingIdx] = newDoc;
+    else this.documents.push(newDoc);
     this.rebuildIndex();
     return newDoc;
   }

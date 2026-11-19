@@ -18,6 +18,7 @@ import type {
   RetrievedEvidenceChunk,
 } from '../types';
 import { AnimatedNumber } from './AnimatedNumber';
+import { runAgentWorkflowApi } from '../services/api';
 
 interface RetentionStudioWorkspaceProps {
   customers: EnrichedCustomer[];
@@ -98,20 +99,12 @@ export function RetentionStudioWorkspace({
     const timer2 = setTimeout(() => setActiveStageIdx(2), 680);
 
     try {
-      const res = await fetch('/api/agents/workflow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer: selectedCustomer,
-          engine: chosenEngine,
-          top_k: 5,
-          inject_hallucination_test: testGuardrail,
-        }),
+      const data = await runAgentWorkflowApi({
+        customer: selectedCustomer,
+        engine: chosenEngine,
+        top_k: 5,
+        inject_hallucination_test: testGuardrail,
       });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Agent workflow failed.');
-      }
 
       setActiveStageIdx(3);
       await new Promise((r) => setTimeout(r, 260));

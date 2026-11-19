@@ -18,6 +18,7 @@ import type {
   SingleModelMetrics,
 } from '../types';
 import { AnimatedNumber } from './AnimatedNumber';
+import { updateEnsembleWeights } from '../services/api';
 
 interface ModelArenaWorkspaceProps {
   evaluation: ModelEvaluationReport | null;
@@ -87,16 +88,9 @@ export function ModelArenaWorkspace({
     setWeights(nextWeights);
     setIsUpdating(true);
     try {
-      const res = await fetch('/api/ml/weights', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weights: nextWeights }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setWeights(data.evaluation.weights);
-        onWeightsUpdated(data.evaluation, data.customers);
-      }
+      const data = await updateEnsembleWeights(nextWeights);
+      setWeights(data.evaluation.weights);
+      onWeightsUpdated(data.evaluation, data.customers);
     } finally {
       setIsUpdating(false);
     }

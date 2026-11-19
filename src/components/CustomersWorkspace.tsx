@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import type { EnrichedCustomer, ModelBreakdown, RiskLevel } from '../types';
 import { parseCustomerCsv, exportCustomersToCsv } from '../utils/csv';
+import { predictSingleCustomer, scoreCustomerBatch } from '../services/api';
 import { RadialRiskGauge } from './RadialRiskGauge';
 
 interface CustomersWorkspaceProps {
@@ -94,15 +95,8 @@ export function CustomersWorkspace({
         tech_support: overrides.techSupport ? 'Yes' : 'No',
         usage_score: overrides.techSupport ? Math.min(95, base.usage_score + 12) : base.usage_score,
       };
-      const res = await fetch('/api/ml/predict', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customer: simulatedPayload }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setSimPrediction(data.prediction);
-      }
+      const data = await predictSingleCustomer(simulatedPayload);
+      setSimPrediction(data.prediction);
     } finally {
       setIsSimulating(false);
     }
@@ -114,18 +108,10 @@ export function CustomersWorkspace({
     try {
       const text = await file.text();
       const parsed = parseCustomerCsv(text);
-      const res = await fetch('/api/customers/score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customers: parsed }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Server scoring failed.');
-      }
-      onCustomersUpdated(data.customers, `Uploaded CSV: ${file.name}`);
-      if (data.customers[0]) {
-        selectCustomer(data.customers[0]);
+      const scoredCustomers = await scoreCustomerBatch(parsed);
+      onCustomersUpdated(scoredCustomers, `Uploaded CSV: ${file.name}`);
+      if (scoredCustomers[0]) {
+        selectCustomer(scoredCustomers[0]);
       }
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Unable to parse CSV file.');

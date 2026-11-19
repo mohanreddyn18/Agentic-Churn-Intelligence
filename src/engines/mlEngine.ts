@@ -9,7 +9,7 @@ import type {
   RiskLevel,
   RocPoint,
   SingleModelMetrics,
-} from '../src/types';
+} from '../types';
 import { generateCalibrationDataset, type LabeledTrainingRecord } from './dataset';
 
 const FEATURE_META = [
@@ -96,7 +96,6 @@ function recordToVector(r: LabeledTrainingRecord): FeatureVector {
   ];
 }
 
-// ---------- MODEL 1: L2-REGULARIZED LOGISTIC REGRESSION ----------
 class LogisticRegressionModel {
   weights: number[] = [];
   bias = 0;
@@ -160,7 +159,6 @@ class LogisticRegressionModel {
   }
 }
 
-// ---------- MODEL 2: RANDOM FOREST (15 CART TREES WITH GINI SPLITTING) ----------
 interface TreeNode {
   isLeaf: boolean;
   prob?: number;
@@ -220,7 +218,6 @@ class DecisionTreeClassifier {
 
     const d = X[0].length;
     const allFeatures = Array.from({ length: d }, (_, i) => i);
-    // Fisher-Yates shuffle for random feature subspace
     for (let i = allFeatures.length - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
       [allFeatures[i], allFeatures[j]] = [allFeatures[j], allFeatures[i]];
@@ -237,7 +234,6 @@ class DecisionTreeClassifier {
     for (const f of candidateFeatures) {
       const vals = Array.from(new Set(indices.map((i) => X[i][f]))).sort((a, b) => a - b);
       if (vals.length < 2) continue;
-      // Evaluate up to 8 quantile thresholds per feature for crisp, fast splits
       const step = Math.max(1, Math.floor(vals.length / 8));
       for (let tIdx = 0; tIdx < vals.length - 1; tIdx += step) {
         const threshold = (vals[tIdx] + vals[tIdx + 1]) / 2;
@@ -282,11 +278,8 @@ class DecisionTreeClassifier {
   predictProba(x: FeatureVector): number {
     let node = this.root;
     while (node && !node.isLeaf) {
-      if (x[node.featureIndex!] <= node.threshold!) {
-        node = node.left!;
-      } else {
-        node = node.right!;
-      }
+      if (x[node.featureIndex!] <= node.threshold!) node = node.left!;
+      else node = node.right!;
     }
     return node?.prob ?? 0.5;
   }
@@ -332,7 +325,6 @@ class RandomForestModel {
   }
 }
 
-// ---------- MODEL 3: GRADIENT BOOSTED DECISION STUMPS (GBDT) ----------
 interface BoostedStump {
   featureIndex: number;
   threshold: number;
@@ -357,7 +349,6 @@ class GradientBoostingModel {
     this.baseLogOdds = Math.log(posRate / (1 - posRate));
     const F = Array(n).fill(this.baseLogOdds);
 
-    // Precompute candidate thresholds per feature
     const candidateThresholds: number[][] = Array.from({ length: d }, (_, f) => {
       const uniq = Array.from(new Set(X.map((r) => r[f]))).sort((a, b) => a - b);
       const out: number[] = [];
@@ -441,7 +432,6 @@ class GradientBoostingModel {
   }
 }
 
-// ---------- METRICS & ROC-AUC COMPUTATION ----------
 function computeMetrics(
   yTrue: number[],
   probs: number[],
@@ -472,7 +462,6 @@ function computeMetrics(
   const recall = tp / Math.max(1, tp + fn);
   const f1 = (2 * precision * recall) / Math.max(1e-9, precision + recall);
 
-  // ROC Curve across sorted probability thresholds
   const totalPos = Math.max(1, yTrue.filter((v) => v === 1).length);
   const totalNeg = Math.max(1, yTrue.filter((v) => v === 0).length);
 
@@ -492,7 +481,6 @@ function computeMetrics(
     };
   });
 
-  // Sort by FPR ascending then TPR ascending for trapezoidal AUC
   const sortedRoc = [...roc_curve].sort((a, b) => (a.fpr === b.fpr ? a.tpr - b.tpr : a.fpr - b.fpr));
   let auc = 0;
   for (let i = 1; i < sortedRoc.length; i++) {
@@ -512,7 +500,6 @@ function computeMetrics(
   };
 }
 
-// ---------- SINGLETON ENGINE ----------
 export class ChurnMLEngine {
   private lr = new LogisticRegressionModel();
   private rf = new RandomForestModel();
@@ -536,7 +523,6 @@ export class ChurnMLEngine {
 
   private trainAllModels(): void {
     const dataset = generateCalibrationDataset(300);
-    // 80/20 holdout split (240 train, 60 test)
     const splitIdx = Math.floor(dataset.length * 0.8);
     const trainRecords = dataset.slice(0, splitIdx);
     const testRecords = dataset.slice(splitIdx);
@@ -550,11 +536,9 @@ export class ChurnMLEngine {
     this.rf.fit(this.trainX, this.trainY, 15);
     this.gb.fit(this.trainX, this.trainY, 40, 0.14);
 
-    // Compute baseline mean vector for marginal SHAP-like perturbation
     const d = this.trainX[0].length;
     this.baselineVector = Array.from({ length: d }, (_, j) => {
-      const mean = this.trainX.reduce((s, r) => s + r[j], 0) / this.trainX.length;
-      return mean;
+      return this.trainX.reduce((s, r) => s + r[j], 0) / this.trainX.length;
     });
   }
 
@@ -616,13 +600,11 @@ export class ChurnMLEngine {
     const pGb = this.gb.predictProba(x);
     const pEns = this.blend(pLr, pRf, pGb);
 
-    // Model agreement (1 - normalized std deviation across the 3 model families)
     const mean = (pLr + pRf + pGb) / 3;
     const std = Math.sqrt(((pLr - mean) ** 2 + (pRf - mean) ** 2 + (pGb - mean) ** 2) / 3);
     const agreement = Math.max(0.5, Math.min(0.99, 1 - std * 1.8));
     const margin = Math.max(0.03, std * 1.25);
 
-    // Exact marginal ensemble perturbation (SHAP-like additive attribution)
     const lrAttr = this.lr.getFeatureAttributions(x);
     const contributions: FeatureContribution[] = FEATURE_META.map((meta, idx) => {
       const perturbed = [...x];
@@ -633,7 +615,6 @@ export class ChurnMLEngine {
         this.gb.predictProba(perturbed)
       );
       const marginalDelta = pEns - baseEns;
-      // Blend tree-based perturbation with smooth logistic log-odds attribution
       const impact = Number((marginalDelta * 0.72 + lrAttr[idx] * 0.28).toFixed(4));
       return {
         feature: meta.key,
@@ -734,7 +715,6 @@ export class ChurnMLEngine {
       },
     ];
 
-    // Normalized global feature importance across all 3 models
     const lrAbsSum = this.lr.weights.reduce((s, w) => s + Math.abs(w), 0) || 1;
     const feature_importance = FEATURE_META.map((meta, idx) => {
       const lrNorm = Math.abs(this.lr.weights[idx]) / lrAbsSum;

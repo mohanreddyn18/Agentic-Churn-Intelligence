@@ -1,4 +1,4 @@
-import type { CustomerInput } from '../src/types';
+import type { CustomerInput } from '../types';
 
 export const DEMO_CUSTOMERS: CustomerInput[] = [
   {
@@ -342,17 +342,16 @@ export const DEMO_CUSTOMERS: CustomerInput[] = [
 export interface LabeledTrainingRecord {
   tenure: number;
   monthly_charges: number;
-  contract_code: number; // 0 = Month-to-month, 1 = One year, 2 = Two year
+  contract_code: number;
   support_calls: number;
-  echeck_flag: number; // 1 = Electronic check, 0 = other
-  fiber_flag: number; // 1 = Fiber optic, 0 = other
-  tech_support_flag: number; // 1 = Yes, 0 = No
-  usage_score: number; // 0-100
-  nps_score: number; // 1-10
+  echeck_flag: number;
+  fiber_flag: number;
+  tech_support_flag: number;
+  usage_score: number;
+  nps_score: number;
   churned: 0 | 1;
 }
 
-// Deterministic PRNG (Mulberry32) so model training & holdout evaluation are 100% reproducible
 function createRng(seed: number) {
   let state = seed >>> 0;
   return () => {
@@ -364,11 +363,6 @@ function createRng(seed: number) {
   };
 }
 
-/**
- * Generates a realistic 300-row labeled Telecom/SaaS customer churn dataset
- * with nonlinear interaction patterns (e.g. short tenure + month-to-month + high support calls)
- * for training and holdout-evaluating Logistic Regression, Random Forest, and GBDT.
- */
 export function generateCalibrationDataset(count = 300): LabeledTrainingRecord[] {
   const rand = createRng(20261118);
   const rows: LabeledTrainingRecord[] = [];
@@ -430,7 +424,6 @@ export function generateCalibrationDataset(count = 300): LabeledTrainingRecord[]
       )
     );
 
-    // True latent log-odds with nonlinear interactions + realistic stochastic noise
     let logOdds = -0.35;
     logOdds += contract_code === 0 ? 1.15 : contract_code === 1 ? -0.45 : -1.45;
     logOdds += tenure < 6 ? 1.05 : tenure < 14 ? 0.35 : -0.042 * (tenure - 14);
@@ -442,14 +435,8 @@ export function generateCalibrationDataset(count = 300): LabeledTrainingRecord[]
     logOdds += (55 - usage_score) * 0.036;
     logOdds += (6 - nps_score) * 0.26;
 
-    // Nonlinear high-risk synergy (early tenure + high support friction)
-    if (tenure <= 8 && support_calls >= 4) {
-      logOdds += 0.95;
-    }
-    // Protective synergy (long tenure + two-year contract + high usage)
-    if (tenure >= 30 && contract_code === 2 && usage_score >= 75) {
-      logOdds -= 0.85;
-    }
+    if (tenure <= 8 && support_calls >= 4) logOdds += 0.95;
+    if (tenure >= 30 && contract_code === 2 && usage_score >= 75) logOdds -= 0.85;
 
     const trueProb = 1 / (1 + Math.exp(-logOdds));
     const churned: 0 | 1 = rand() < trueProb ? 1 : 0;

@@ -7,6 +7,7 @@ import type {
   RAGSearchResult,
 } from '../types';
 import { AnimatedNumber } from './AnimatedNumber';
+import { evaluateHybridRag, ingestRagDocument, searchHybridRag } from '../services/api';
 
 interface RagLabWorkspaceProps {
   documents: KnowledgeDocument[];
@@ -56,20 +57,14 @@ export function RagLabWorkspace({
     if (!q.trim()) return;
     setIsSearching(true);
     try {
-      const res = await fetch('/api/rag/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: q,
-          semantic_weight: sw,
-          keyword_weight: kw,
-          rrf_k: rk,
-          top_k: tk,
-        }),
+      const res = await searchHybridRag({
+        query: q,
+        semantic_weight: sw,
+        keyword_weight: kw,
+        rrf_k: rk,
+        top_k: tk,
       });
-      if (res.ok) {
-        setSearchResult(await res.json());
-      }
+      setSearchResult(res);
     } finally {
       setIsSearching(false);
     }
@@ -83,13 +78,8 @@ export function RagLabWorkspace({
   const runEvaluation = async (sw = semanticWeight, kw = keywordWeight) => {
     setIsEvaluating(true);
     try {
-      const res = await fetch(
-        `/api/rag/evaluate?k=3&semantic_weight=${sw}&keyword_weight=${kw}`
-      );
-      if (res.ok) {
-        const report = await res.json();
-        setEvalReport(report);
-      }
+      const report = await evaluateHybridRag(3, sw, kw);
+      setEvalReport(report);
     } finally {
       setIsEvaluating(false);
     }
@@ -100,32 +90,23 @@ export function RagLabWorkspace({
     if (!newId.trim() || !newTitle.trim() || !newText.trim()) return;
     setIngestFeedback(null);
 
-    const res = await fetch('/api/rag/documents', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        source_id: newId,
-        title: newTitle,
-        category: newCategory,
-        approval_tier: 'Auto-Approved (Tier 1)',
-        max_discount_pct: newMaxDiscount,
-        text: newText,
-      }),
+    const data = await ingestRagDocument({
+      source_id: newId,
+      title: newTitle,
+      category: newCategory,
+      approval_tier: 'Auto-Approved (Tier 1)',
+      max_discount_pct: newMaxDiscount,
+      text: newText,
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      const evalRes = await fetch('/api/rag/evaluate?k=3');
-      const nextEval = evalRes.ok ? await evalRes.json() : evalReport;
-      if (nextEval) setEvalReport(nextEval);
-      onDocumentsUpdated(data.documents, nextEval);
-      setIngestFeedback(`Indexed ${data.document.source_id} into BM25 & Semantic Vector Store.`);
-      setNewId(`POL-RET-0${data.documents.length + 1}`);
-      setNewTitle('');
-      setNewText('');
-      setShowIngestForm(false);
-      runSearch();
-    }
+    setEvalReport(data.evalReport);
+    onDocumentsUpdated(data.documents, data.evalReport);
+    setIngestFeedback(`Indexed ${data.document.source_id} into BM25 & Semantic Vector Store.`);
+    setNewId(`POL-RET-0${data.documents.length + 1}`);
+    setNewTitle('');
+    setNewText('');
+    setShowIngestForm(false);
+    runSearch();
   };
 
   return (

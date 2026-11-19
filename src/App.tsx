@@ -22,6 +22,7 @@ import { RetentionStudioWorkspace } from './components/RetentionStudioWorkspace'
 import { ModelArenaWorkspace } from './components/ModelArenaWorkspace';
 import { RagLabWorkspace } from './components/RagLabWorkspace';
 import type { WorkspaceTab } from './components/ArchitectureTopology';
+import { loadPlatformBootstrap } from './services/api';
 
 const NAV_ITEMS: Array<{
   id: WorkspaceTab;
@@ -54,34 +55,15 @@ export default function App() {
     setIsLoading(true);
     setLoadError(null);
     try {
-      const [healthRes, custRes, evalRes, docsRes, ragEvalRes] = await Promise.all([
-        fetch('/api/health'),
-        fetch('/api/customers'),
-        fetch('/api/ml/evaluation'),
-        fetch('/api/rag/documents'),
-        fetch('/api/rag/evaluate?k=3'),
-      ]);
-
-      if (!custRes.ok || !evalRes.ok || !docsRes.ok) {
-        throw new Error('Failed to load intelligence engine data from backend.');
-      }
-
-      const [healthData, custData, evalData, docsData, ragEvalData] = await Promise.all([
-        healthRes.json(),
-        custRes.json(),
-        evalRes.json(),
-        docsRes.json(),
-        ragEvalRes.json(),
-      ]);
-
-      setGeminiConfigured(Boolean(healthData.gemini_configured));
-      setCustomers(custData.customers);
-      setEvaluation(evalData);
-      setDocuments(docsData.documents);
-      setRagEval(ragEvalData);
-      setDataSourceLabel(`Enterprise Portfolio (${custData.customers.length} Accounts)`);
+      const data = await loadPlatformBootstrap();
+      setGeminiConfigured(data.geminiConfigured);
+      setCustomers(data.customers);
+      setEvaluation(data.evaluation);
+      setDocuments(data.documents);
+      setRagEval(data.ragEval);
+      setDataSourceLabel(`Enterprise Portfolio (${data.customers.length} Accounts)`);
     } catch (err) {
-      setLoadError(err instanceof Error ? err.message : 'Unable to connect to intelligence server.');
+      setLoadError(err instanceof Error ? err.message : 'Unable to initialize intelligence engine.');
     } finally {
       setIsLoading(false);
     }
