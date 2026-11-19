@@ -4,15 +4,15 @@ import type {
   EnrichedCustomer,
   RetentionRecommendation,
   RetrievedEvidenceChunk,
-} from '../src/types';
-import { ragEngine } from '../src/engines/ragEngine';
+} from '../src/types.js';
+import { ragEngine } from '../src/engines/ragEngine.js';
 import {
   assembleWorkflowResult,
   buildCustomerQuery,
   buildHallucinationTestCandidate,
   buildPolicyGroundedStrategies,
   classifyChurnArchetype,
-} from '../src/engines/policyOrchestrator';
+} from '../src/engines/policyOrchestrator.js';
 
 async function generateWithGemini(
   customer: EnrichedCustomer,

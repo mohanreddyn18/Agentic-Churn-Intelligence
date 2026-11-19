@@ -1,4 +1,4 @@
-import type { CustomerInput } from '../types';
+import type { CustomerInput } from '../types.js';
 
 export const DEMO_CUSTOMERS: CustomerInput[] = [
   {

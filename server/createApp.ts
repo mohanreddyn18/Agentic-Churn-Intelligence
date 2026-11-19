@@ -1,10 +1,10 @@
 import express from 'express';
 import cors from 'cors';
-import type { CustomerInput, EnsembleWeights } from '../src/types';
-import { DEMO_CUSTOMERS } from '../src/engines/dataset';
-import { mlEngine } from '../src/engines/mlEngine';
-import { ragEngine } from '../src/engines/ragEngine';
-import { executeAgentWorkflow } from './agentOrchestrator';
+import type { CustomerInput, EnsembleWeights } from '../src/types.js';
+import { DEMO_CUSTOMERS } from '../src/engines/dataset.js';
+import { mlEngine } from '../src/engines/mlEngine.js';
+import { ragEngine } from '../src/engines/ragEngine.js';
+import { executeAgentWorkflow } from './agentOrchestrator.js';
 
 export function createApiApp() {
   const app = express();
@@ -141,6 +141,10 @@ export function createApiApp() {
       const message = err instanceof Error ? err.message : 'Agent workflow execution failed.';
       return res.status(500).json({ error: message });
     }
+  });
+
+  app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'API route not found.' });
   });
 
   return app;

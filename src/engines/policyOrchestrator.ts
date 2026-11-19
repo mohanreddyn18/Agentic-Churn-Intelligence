@@ -5,8 +5,8 @@ import type {
   RejectedRecommendation,
   RetentionRecommendation,
   RetrievedEvidenceChunk,
-} from '../types';
-import { ragEngine } from './ragEngine';
+} from '../types.js';
+import { ragEngine } from './ragEngine.js';
 
 export function buildCustomerQuery(customer: EnrichedCustomer): string {
   const parts: string[] = [];

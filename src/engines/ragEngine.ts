@@ -4,7 +4,7 @@ import type {
   RAGEvaluationReport,
   RAGSearchResult,
   RetrievedEvidenceChunk,
-} from '../types';
+} from '../types.js';
 
 export const INITIAL_KNOWLEDGE_BASE: KnowledgeDocument[] = [
   {

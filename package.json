@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "start": "NODE_ENV=production tsx server.ts",
-    "lint": "tsc --noEmit && eslint src server server.ts"
+    "lint": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit && eslint src server api server.ts"
   },
   "dependencies": {
     "@google/genai": "latest",

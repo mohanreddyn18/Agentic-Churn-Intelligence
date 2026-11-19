@@ -9,8 +9,8 @@ import type {
   RiskLevel,
   RocPoint,
   SingleModelMetrics,
-} from '../types';
-import { generateCalibrationDataset, type LabeledTrainingRecord } from './dataset';
+} from '../types.js';
+import { generateCalibrationDataset, type LabeledTrainingRecord } from './dataset.js';
 
 const FEATURE_META = [
   { key: 'tenure', label: 'Tenure (Months)' },
