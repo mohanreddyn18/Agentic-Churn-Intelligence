@@ -1,0 +1,8 @@
+{
+  "name": "RetainIQ — Agentic RAG Churn Intelligence",
+  "description": "Multi-model machine learning churn prediction, hybrid BM25 + semantic RAG knowledge retrieval, and verified multi-agent retention strategy platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
